@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wordle Filter — 5‑Letter Dictionary</title>
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --panel:#111827; /* gray-900 */
+      --muted:#1f2937; /* gray-800 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22d3ee; /* cyan-400 */
+      --accent2:#a78bfa; /* violet-400 */
+      --good:#22c55e; /* green-500 */
+      --bad:#ef4444; /* red-500 */
+      --warn:#f59e0b; /* amber-500 */
+      --chip:#374151; /* gray-700 */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(135deg,var(--bg),#0b1023);color:var(--text);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"}
+    a{color:var(--accent)}
+    header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #1f2937;background:rgba(17,24,39,.8);backdrop-filter: blur(6px);position:sticky;top:0;z-index:5}
+    .logo{font-weight:800;letter-spacing:.3px}
+    .tag{padding:2px 8px;border-radius:999px;background:var(--chip);font-size:12px}
+    main{max-width:1200px;margin:0 auto;padding:20px;display:grid;grid-template-columns:340px 1fr;gap:20px}
+    @media (max-width: 980px){main{grid-template-columns:1fr}}
+
+    .card{background:linear-gradient(180deg,var(--panel),#0e152c);border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .card h2{margin:0 0 10px 0;font-size:18px}
+    .card .body{padding:16px}
+
+    .uploader{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #334155;background:#0b1227;color:var(--text);padding:10px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{border-color:#475569}
+    .btn.primary{background:linear-gradient(90deg,var(--accent2),var(--accent));border:none}
+
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--chip);font-size:12px;margin:4px 6px 0 0}
+
+    .tabs{display:flex;border-bottom:1px solid #1f2937}
+    .tab{padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent}
+    .tab.active{border-color:var(--accent);color:var(--accent)}
+
+    .grid{display:grid;grid-template-columns:repeat(13,1fr);gap:6px;margin-top:10px}
+    .key{user-select:none;text-transform:uppercase;text-align:center;padding:8px 0;border-radius:8px;background:#111826;border:1px solid #1f2937;cursor:pointer}
+    .key.active-inc{background:rgba(34,197,94,.15);border-color:var(--good)}
+    .key.active-exc{background:rgba(239,68,68,.15);border-color:var(--bad)}
+
+    .scope{display:grid;grid-template-columns:1fr;gap:12px}
+    .scope h3{margin:8px 0 0;font-size:14px;color:#cbd5e1}
+
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+
+    .results-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1f2937}
+    .count{font-weight:700}
+    .search{display:flex;gap:8px;align-items:center}
+    .input{background:#0b1227;border:1px solid #334155;color:var(--text);padding:10px 12px;border-radius:10px;min-width:220px}
+
+    .list{max-height:70vh;overflow:auto}
+    ul.words{list-style:none;margin:0;padding:14px;display:grid;grid-template-columns:repeat(auto-fill, minmax(120px,1fr));gap:10px}
+    ul.words li{background:#0b1227;border:1px solid #1f2937;border-radius:10px;padding:10px 12px;text-transform:uppercase;letter-spacing:.5px;text-align:center}
+
+    .help{font-size:13px;color:#cbd5e1}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Wordle Filter</div>
+    <span class="tag">5‑letter dictionary</span>
+    <div style="margin-left:auto" class="help">Auto-loads <code>wordle_solutions_full.csv</code> from this repo if present. Or upload your own CSV.</div>
+  </header>
+
+  <main>
+    <!-- Left: Controls -->
+    <section class="card">
+      <div class="body">
+        <h2>1) Load dictionary</h2>
+        <div class="uploader">
+          <input id="file" type="file" accept=".csv,.txt" />
+          <button class="btn" id="useSample">Use built‑in sample</button>
+          <button class="btn" id="clearAll">Clear filters</button>
+        </div>
+        <div style="margin-top:10px" class="help">CSV format: a single column with words (e.g., the 2309 Wordle solutions). Non-5-letter rows are ignored.</div>
+      </div>
+    </section>
+
+    <!-- Right: Results -->
+    <section class="card" style="grid-row: span 3;">
+      <div class="results-head">
+        <div class="count"><span id="count">0</span> matches</div>
+        <div class="search">
+          <input id="searchBox" class="input" placeholder="Quick filter (contains...)" />
+          <button class="btn" id="downloadCsv">Download CSV</button>
+        </div>
+      </div>
+      <div class="list">
+        <ul id="words" class="words"></ul>
+      </div>
+    </section>
+
+    <!-- Global filters -->
+    <section class="card">
+      <div class="body">
+        <h2>2) Global filters</h2>
+        <div class="scope">
+          <div>
+            <h3>Must include (anywhere)</h3>
+            <div class="grid" id="g-include"></div>
+          </div>
+          <div>
+            <h3>Must NOT include (anywhere)</h3>
+            <div class="grid" id="g-exclude"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Position filters -->
+    <section class="card">
+      <div class="body">
+        <h2>3) Position filters</h2>
+        <div class="tabs" id="tabs"></div>
+        <div class="scope">
+          <div>
+            <h3>Must be at this position</h3>
+            <div class="grid" id="p-include"></div>
+          </div>
+          <div>
+            <h3>Must NOT be at this position</h3>
+            <div class="grid" id="p-exclude"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  // ===== Utilities =====
+  const A2Z = Array.from({length:26}, (_,i)=>String.fromCharCode(97+i));
+  const byId = id => document.getElementById(id);
+  const setText = (id, v) => (byId(id).textContent = v);
+
+  // State
+  const state = {
+    words: [],
+    filtered: [],
+    search: "",
+    globalInclude: new Set(),
+    globalExclude: new Set(),
+    pos: [0,1,2,3,4].map(()=>({ include:new Set(), exclude:new Set() })),
+    activePos: 0,
+    autoloadTried: false,
+  };
+
+  // Sample mini list (for quick demo without a file)
+  const SAMPLE = [
+    'cigar','rebut','sissy','humph','awake','blush','focal','evade','naval','serve',
+    'heath','dwarf','model','stare','raise','orate','count','could','cloud','touch',
+    'point','pilot','amino','voice','width','fifth','light','filth','civil','gooey'
+  ];
+
+  // ===== DOM Builders =====
+  function buildGrid(rootId, kind){
+    const root = byId(rootId);
+    root.innerHTML = '';
+    A2Z.forEach(ch => {
+      const btn = document.createElement('button');
+      btn.className = 'key';
+      btn.textContent = ch;
+      btn.dataset.letter = ch;
+      btn.dataset.kind = kind; // 'g-include' | 'g-exclude' | 'p-include' | 'p-exclude'
+      btn.addEventListener('click', onKeyClick);
+      root.appendChild(btn);
+    });
+  }
+
+  function buildTabs(){
+    const tabs = byId('tabs');
+    tabs.innerHTML = '';
+    for(let i=0;i<5;i++){
+      const t = document.createElement('div');
+      t.className = 'tab' + (i===state.activePos?' active':'');
+      t.textContent = `Position ${i+1}`;
+      t.dataset.idx = i;
+      t.addEventListener('click', ()=>{
+        state.activePos = i;
+        updateTabs();
+        refreshButtonStates();
+        apply();
+      });
+      tabs.appendChild(t);
+    }
+  }
+
+  function updateTabs(){
+    document.querySelectorAll('#tabs .tab').forEach((el,idx)=>{
+      el.classList.toggle('active', idx===state.activePos);
+    });
+  }
+
+  // ===== Event Handlers =====
+  function onKeyClick(e){
+    const btn = e.currentTarget;
+    const letter = btn.dataset.letter;
+    const kind = btn.dataset.kind;
+    const pos = state.activePos;
+
+    // ensure mutual exclusivity include vs exclude in each scope
+    function toggle(set, otherSet){
+      if (set.has(letter)) set.delete(letter); else { set.add(letter); otherSet.delete(letter); }
+    }
+
+    if (kind==='g-include') toggle(state.globalInclude, state.globalExclude);
+    if (kind==='g-exclude') toggle(state.globalExclude, state.globalInclude);
+    if (kind==='p-include') toggle(state.pos[pos].include, state.pos[pos].exclude);
+    if (kind==='p-exclude') toggle(state.pos[pos].exclude, state.pos[pos].include);
+
+    refreshButtonStates();
+    apply();
+  }
+
+  byId('file').addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    loadWordsFromText(text);
+  });
+
+  byId('useSample').addEventListener('click', ()=>{
+    loadWordsFromArray(SAMPLE);
+  });
+
+  byId('clearAll').addEventListener('click', ()=>{
+    state.globalInclude.clear();
+    state.globalExclude.clear();
+    state.pos.forEach(p=>{p.include.clear(); p.exclude.clear();});
+    state.search='';
+    byId('searchBox').value='';
+    refreshButtonStates();
+    apply();
+  });
+
+  byId('searchBox').addEventListener('input', (e)=>{
+    state.search = e.target.value.trim().toLowerCase();
+    apply();
+  });
+
+  byId('downloadCsv').addEventListener('click', ()=>{
+    const csv = state.filtered.join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'filtered_words.csv';
+    a.click();
+  });
+
+  // ===== Loaders =====
+  function loadWordsFromText(text){
+    const words = text.split(/\r?\n/)
+      .map(s=>s.trim().toLowerCase())
+      .filter(s=>/^[a-z]{5}$/.test(s));
+    loadWordsFromArray(words);
+  }
+
+  function loadWordsFromArray(arr){
+    state.words = Array.from(new Set(arr.map(w=>w.toLowerCase()).filter(w=>/^[a-z]{5}$/.test(w))));
+    apply();
+  }
+
+  // Try auto-loading CSV from this repo at startup
+  async function tryAutoload(){
+    if(state.autoloadTried) return; // guard
+    state.autoloadTried = true;
+    try{
+      const res = await fetch('wordle_solutions_full.csv', {cache:'no-store'});
+      if(!res.ok) throw new Error('no csv');
+      const text = await res.text();
+      if(text && text.length>0){
+        loadWordsFromText(text);
+        return;
+      }
+      throw new Error('empty');
+    }catch(err){
+      // fallback to sample
+      loadWordsFromArray(SAMPLE);
+    }
+  }
+
+  // ===== Apply Filters =====
+  function apply(){
+    const GI = state.globalInclude; // Set
+    const GE = state.globalExclude; // Set
+    const P = state.pos;            // [{include:Set, exclude:Set},...]
+    const q = state.search;
+
+    const out = [];
+    for(const w of state.words){
+      if(q && !w.includes(q)) continue;
+      // global exclude
+      let ok = true;
+      for(const ch of GE){ if(w.includes(ch)){ ok=false; break; } }
+      if(!ok) continue;
+      // global include: word must contain ALL letters in GI
+      for(const ch of GI){ if(!w.includes(ch)){ ok=false; break; } }
+      if(!ok) continue;
+      // position constraints
+      for(let i=0;i<5 && ok;i++){
+        const inc = P[i].include; // if non-empty, w[i] must be in inc
+        const exc = P[i].exclude;
+        const c = w[i];
+        if(inc.size>0 && !inc.has(c)) { ok=false; break; }
+        if(exc.has(c)) { ok=false; break; }
+      }
+      if(ok) out.push(w);
+    }
+
+    state.filtered = out;
+    renderList();
+  }
+
+  function renderList(){
+    const ul = byId('words');
+    ul.innerHTML = '';
+    for(const w of state.filtered){
+      const li = document.createElement('li');
+      li.textContent = w;
+      ul.appendChild(li);
+    }
+    setText('count', state.filtered.length);
+  }
+
+  // ===== Visual sync =====
+  function refreshButtonStates(){
+    // global
+    document.querySelectorAll('#g-include .key').forEach(btn=>{
+      const ch = btn.dataset.letter; btn.classList.toggle('active-inc', state.globalInclude.has(ch)); btn.classList.toggle('active-exc', false);
+    });
+    document.querySelectorAll('#g-exclude .key').forEach(btn=>{
+      const ch = btn.dataset.letter; btn.classList.toggle('active-exc', state.globalExclude.has(ch)); btn.classList.toggle('active-inc', false);
+    });
+    // position (current tab only)
+    document.querySelectorAll('#p-include .key').forEach(btn=>{
+      const ch = btn.dataset.letter; btn.classList.toggle('active-inc', state.pos[state.activePos].include.has(ch)); btn.classList.toggle('active-exc', false);
+    });
+    document.querySelectorAll('#p-exclude .key').forEach(btn=>{
+      const ch = btn.dataset.letter; btn.classList.toggle('active-exc', state.pos[state.activePos].exclude.has(ch)); btn.classList.toggle('active-inc', false);
+    });
+  }
+
+  // ===== Init =====
+  buildGrid('g-include','g-include');
+  buildGrid('g-exclude','g-exclude');
+  buildTabs();
+  buildGrid('p-include','p-include');
+  buildGrid('p-exclude','p-exclude');
+  refreshButtonStates();
+  tryAutoload(); // auto-load CSV if present; else falls back to SAMPLE
+  </script>
+</body>
+</html>
