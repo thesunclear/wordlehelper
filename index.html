@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wordle Filter — 5‑Letter Dictionary</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --muted:#1f2937;
+      --text:#e5e7eb;
+      --text-strong:#ffffff;
+      --accent:#22d3ee;
+      --accent2:#a78bfa;
+      --good:#22c55e;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+      --chip:#374151;
+      --key-bg:#111826;
+      --key-border:#1f2937;
+      --key-text:#e5e7eb;
+      --key-text-active:#eafff8;
+    }
+    body.light {
+      --bg:#f8fafc;
+      --panel:#ffffff;
+      --muted:#e2e8f0;
+      --text:#1e293b;
+      --text-strong:#000000;
+      --accent:#0ea5e9;
+      --accent2:#8b5cf6;
+      --good:#16a34a;
+      --bad:#dc2626;
+      --warn:#d97706;
+      --chip:#cbd5e1;
+      --key-bg:#f1f5f9;
+      --key-border:#94a3b8;
+      --key-text:#1e293b;
+      --key-text-active:#000000;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(135deg,var(--bg),#0b1023);color:var(--text);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"}
+    a{color:var(--accent)}
+    header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #1f2937;background:rgba(17,24,39,.8);backdrop-filter: blur(6px);position:sticky;top:0;z-index:5}
+    .logo{font-weight:800;letter-spacing:.3px}
+    .tag{padding:2px 8px;border-radius:999px;background:var(--chip);font-size:12px}
+    .toggle{margin-left:auto}
+    .toggle button{padding:6px 12px;border-radius:8px;border:1px solid var(--muted);background:var(--panel);color:var(--text);cursor:pointer}
+    main{max-width:1200px;margin:0 auto;padding:20px;display:grid;grid-template-columns:340px 1fr;gap:20px}
+    @media (max-width: 980px){main{grid-template-columns:1fr}}
+
+    .card{background:linear-gradient(180deg,var(--panel),#0e152c);border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    body.light .card{background:var(--panel);}
+    .card h2{margin:0 0 10px 0;font-size:18px}
+    .card .body{padding:16px}
+
+    .uploader{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #334155;background:#0b1227;color:var(--text);padding:10px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{border-color:#475569}
+    .btn.primary{background:linear-gradient(90deg,var(--accent2),var(--accent));border:none;color:#09121f}
+
+    .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid #1f2937}
+    .tab{padding:8px 10px;cursor:pointer;border-bottom:2px solid transparent;font-size:14px;flex:1 0 auto;text-align:center}
+    .tab.active{border-color:var(--accent);color:var(--accent)}
+
+    .grid{display:grid;grid-template-columns:repeat(13,1fr);gap:6px;margin-top:10px}
+    .key{user-select:none;text-transform:uppercase;text-align:center;padding:9px 0;border-radius:8px;background:var(--key-bg);border:1px solid var(--key-border);cursor:pointer;color:var(--key-text);font-weight:700;letter-spacing:.5px}
+    .key:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+    .key:hover{filter:brightness(1.08)}
+    .key.active-inc{background:rgba(34,197,94,.18);border-color:var(--good);color:var(--key-text-active)}
+    .key.active-exc{background:rgba(239,68,68,.18);border-color:var(--bad);color:var(--key-text-active)}
+
+    .scope{display:grid;grid-template-columns:1fr;gap:12px}
+    .scope h3{margin:8px 0 0;font-size:14px;color:#cbd5e1}
+
+    .results-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1f2937}
+    .count{font-weight:700}
+    .search{display:flex;gap:8px;align-items:center}
+    .input{background:#0b1227;border:1px solid #334155;color:var(--text);padding:10px 12px;border-radius:10px;min-width:220px}
+
+    .list{max-height:70vh;overflow:auto}
+    ul.words{list-style:none;margin:0;padding:14px;display:grid;grid-template-columns:repeat(auto-fill, minmax(120px,1fr));gap:10px}
+    ul.words li{background:#0b1227;border:1px solid #1f2937;border-radius:10px;padding:10px 12px;text-transform:uppercase;letter-spacing:.5px;text-align:center}
+    body.light ul.words li{background:#f1f5f9;border:1px solid #cbd5e1}
+
+    .help{font-size:13px;color:#cbd5e1}
+    .debug{font-size:12px;color:#94a3b8;margin-left:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Wordle Filter</div>
+    <span class="tag">5‑letter dictionary</span>
+    <div class="toggle"><button id="modeToggle">🌙 Dark</button></div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="body">
+        <h2>1) Load dictionary</h2>
+        <div class="uploader">
+          <input id="file" type="file" accept=".csv,.txt" />
+          <button class="btn" id="useSample">Use built‑in sample</button>
+          <button class="btn" id="clearAll">Clear filters</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="grid-row: span 3;">
+      <div class="results-head">
+        <div class="count"><span id="count">0</span> matches</div>
+        <div class="search">
+          <input id="searchBox" class="input" placeholder="Quick filter (contains...)" />
+          <button class="btn" id="downloadCsv">Download CSV</button>
+        </div>
+      </div>
+      <div class="list">
+        <ul id="words" class="words"></ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="body">
+        <h2>2) Global filters</h2>
+        <div class="scope">
+          <div><h3>Must include</h3><div class="grid" id="g-include"></div></div>
+          <div><h3>Must NOT include</h3><div class="grid" id="g-exclude"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="body">
+        <h2>3) Position filters</h2>
+        <div class="tabs" id="tabs"></div>
+        <div class="scope">
+          <div><h3>Must be at this position</h3><div class="grid" id="p-include"></div></div>
+          <div><h3>Must NOT be at this position</h3><div class="grid" id="p-exclude"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="body">
+        <h2>4) Wordle feedback (Paste result)</h2>
+        <div class="scope" style="gap:8px">
+          <div class="help">
+            Format: <code>guess</code> + <code>🟩⬛🟨⬛⬛</code> or <code>GYBBY</code> (spaces, commas, slashes ignored).
+            <br>🟩/G = correct spot (green), 🟨/Y = wrong spot (yellow), ⬛/B = not in word (black).
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+            <input id="guessInput" class="input" placeholder="guess (e.g., raise)" maxlength="5" style="min-width:180px" />
+            <input id="patternInput" class="input" placeholder="result (e.g., 🟩⬛🟨⬛⬛ or GYBBY)" style="min-width:260px" />
+            <button class="btn primary" id="applyPattern">Apply</button>
+            <button class="btn" id="undoLast" title="Remove last applied feedback">Undo last</button>
+            <button class="btn" id="resetFeedback" title="Clear all applied feedback">Reset feedback</button>
+            <span class="debug" id="patternMsg"></span>
+          </div>
+          <div class="help">
+            Applied feedback: <strong id="historyCount">0</strong> / 6
+            <div id="historyList" class="debug"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  const A2Z = Array.from({length:26},(_,i)=>String.fromCharCode(97+i));
+  const state={words:[],filtered:[],search:"",globalInclude:new Set(),globalExclude:new Set(),pos:[0,1,2,3,4].map(()=>({include:new Set(),exclude:new Set()})),activePos:0};
+  const SAMPLE=['cigar','raise','count','light','civil','gooey'];
+  function byId(x){return document.getElementById(x)}
+  function parseWordsFromCsvText(t){const out=[];const seen=new Set();t.replace(/^\\uFEFF/,'').split(/\\r?\\n/).forEach(r=>{const line=(r||'').trim();if(!line)return;const first=line.split(/[\\t,;]+/)[0].trim();const m=first.match(/[A-Za-z]{5}/)||line.match(/[A-Za-z]{5}/);if(!m)return;const w=m[0].toLowerCase();if(/^[a-z]{5}$/.test(w)&&!seen.has(w)){seen.add(w);out.push(w)}});return out}
+  function buildGrid(id,k){const root=byId(id);root.innerHTML='';A2Z.forEach(ch=>{const b=document.createElement('button');b.className='key';b.textContent=ch;b.dataset.letter=ch;b.dataset.kind=k;b.onclick=onKeyClick;root.appendChild(b)})}
+  function buildTabs(){const tabs=byId('tabs');tabs.innerHTML='';for(let i=0;i<5;i++){const t=document.createElement('div');t.className='tab'+(i===state.activePos?' active':'');t.textContent=`Position ${i+1}`;t.dataset.idx=i;t.onclick=()=>{state.activePos=i;updateTabs();refreshButtonStates();apply()};tabs.appendChild(t)}}
+  function updateTabs(){document.querySelectorAll('#tabs .tab').forEach((el,idx)=>el.classList.toggle('active',idx===state.activePos))}
+  function onKeyClick(e){const b=e.currentTarget;const l=b.dataset.letter;const k=b.dataset.kind;const p=state.activePos;function t(s,o){if(s.has(l))s.delete(l);else{s.add(l);o.delete(l)}}if(k==='g-include')t(state.globalInclude,state.globalExclude);if(k==='g-exclude')t(state.globalExclude,state.globalInclude);if(k==='p-include')t(state.pos[p].include,state.pos[p].exclude);if(k==='p-exclude')t(state.pos[p].exclude,state.pos[p].include);refreshButtonStates();apply()}
+  function refreshButtonStates(){document.querySelectorAll('#g-include .key').forEach(b=>{b.classList.toggle('active-inc',state.globalInclude.has(b.dataset.letter))});document.querySelectorAll('#g-exclude .key').forEach(b=>{b.classList.toggle('active-exc',state.globalExclude.has(b.dataset.letter))});document.querySelectorAll('#p-include .key').forEach(b=>{b.classList.toggle('active-inc',state.pos[state.activePos].include.has(b.dataset.letter))});document.querySelectorAll('#p-exclude .key').forEach(b=>{b.classList.toggle('active-exc',state.pos[state.activePos].exclude.has(b.dataset.letter))})}
+  function apply(){const GI=state.globalInclude,GE=state.globalExclude,P=state.pos,q=state.search;const out=[];for(const w of state.words){if(q&&!w.includes(q))continue;let ok=true;for(const ch of GE)if(w.includes(ch)){ok=false;break}if(!ok)continue;for(const ch of GI)if(!w.includes(ch)){ok=false;break}if(!ok)continue;for(let i=0;i<5&&ok;i++){const inc=P[i].include,exc=P[i].exclude,c=w[i];if(inc.size>0&&!inc.has(c)){ok=false;break}if(exc.has(c)){ok=false;break}}if(ok)out.push(w)}state.filtered=out;renderList()}
+  function renderList(){const ul=byId('words');ul.innerHTML='';for(const w of state.filtered){const li=document.createElement('li');li.textContent=w;ul.appendChild(li)}byId('count').textContent=state.filtered.length}
+  function loadWordsFromArray(a){state.words=[...new Set(a.map(w=>w.toLowerCase()).filter(w=>/^[a-z]{5}$/.test(w)))];apply()}
+  async function tryAutoload(){try{const r=await fetch('./wordle_solutions_full.csv',{cache:'no-store'});if(!r.ok)throw'';const t=await r.text();const w=parseWordsFromCsvText(t);if(!w.length)throw'';loadWordsFromArray(w)}catch(e){loadWordsFromArray(SAMPLE)}}
+  byId('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;loadWordsFromArray(parseWordsFromCsvText(await f.text()))}
+  byId('useSample').onclick=()=>loadWordsFromArray(SAMPLE)
+  byId('clearAll').onclick=()=>{state.globalInclude.clear();state.globalExclude.clear();state.pos.forEach(p=>{p.include.clear();p.exclude.clear()});state.search='';byId('searchBox').value='';refreshButtonStates();apply()}
+  byId('searchBox').oninput=e=>{state.search=e.target.value.trim().toLowerCase();apply()}
+  byId('downloadCsv').onclick=()=>{const csv=state.filtered.join('\\n');const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='filtered_words.csv';a.click()}
+  byId('modeToggle').onclick=()=>{document.body.classList.toggle('light');byId('modeToggle').textContent=document.body.classList.contains('light')?'☀️ Light':'🌙 Dark'}
+
+  buildGrid('g-include','g-include');buildGrid('g-exclude','g-exclude');buildTabs();buildGrid('p-include','p-include');buildGrid('p-exclude','p-exclude');refreshButtonStates();tryAutoload();
+
+  // ---------- Wordle Feedback Mode (cumulative up to 6) ----------
+  function normalizeGuess(x) {
+    return (x || '').trim().toLowerCase();
+  }
+  function normalizePattern(x) {
+    // Accept 🟩🟨⬛ or G/Y/B (case-insensitive) or 1/2/0 mappings.
+    const s = (x || '')
+      .toUpperCase()
+      .replaceAll(/\\s|,|\\/|\\|/g, '')   // strip spaces, commas, slashes, pipes
+      .replaceAll('🟩', 'G')
+      .replaceAll('🟨', 'Y')
+      .replaceAll('⬛', 'B')
+      .replaceAll('🟫', 'B')
+      .replaceAll('□',  'B')
+      .replaceAll('■',  'B')
+      .replaceAll('0',  'B')
+      .replaceAll('1',  'G')
+      .replaceAll('2',  'Y');
+    return s;
+  }
+  function applyWordleFeedback(guess, pat) {
+    if (!/^[a-z]{5}$/.test(guess)) throw new Error('Guess must be 5 letters (a-z).');
+    if (pat.length !== 5 || /[^GYB]/.test(pat)) throw new Error('Result must be 5 chars of G/Y/B (or 🟩🟨⬛).');
+
+    const GI = state.globalInclude;
+    const GE = state.globalExclude;
+
+    // 1) Greens: lock position include + mark globally required
+    for (let i = 0; i < 5; i++) {
+      const ch = guess[i];
+      if (pat[i] === 'G') {
+        state.pos[i].include.clear();
+        state.pos[i].include.add(ch);
+        GI.add(ch);
+        state.pos[i].exclude.delete(ch);
+      }
+    }
+
+    // 2) Yellows: globally required, but not at this position
+    for (let i = 0; i < 5; i++) {
+      const ch = guess[i];
+      if (pat[i] === 'Y') {
+        GI.add(ch);
+        state.pos[i].exclude.add(ch);
+      }
+    }
+
+    // 3) Blacks: if letter is not required elsewhere, globally exclude; otherwise only exclude at this pos
+    for (let i = 0; i < 5; i++) {
+      const ch = guess[i];
+      if (pat[i] === 'B') {
+        const requiredSomewhere =
+          GI.has(ch) || state.pos.some(p => p.include.has(ch));
+        if (requiredSomewhere) {
+          state.pos[i].exclude.add(ch);
+        } else {
+          GE.add(ch);
+          for (let k = 0; k < 5; k++) state.pos[k].include.delete(ch);
+        }
+      }
+    }
+
+    refreshButtonStates();
+    apply();
+  }
+
+  // History (up to 6)
+  const feedbackHistory = []; // {guess, pattern}
+  function renderHistory() {
+    byId('historyCount').textContent = String(feedbackHistory.length);
+    const list = byId('historyList');
+    if (feedbackHistory.length === 0) {
+      list.textContent = '(empty)';
+      return;
+    }
+    list.textContent = feedbackHistory
+      .map((h, i) => `#${i + 1} ${h.guess.toUpperCase()} ${h.pattern}`)
+      .join('  |  ');
+  }
+  function clearFiltersOnly() {
+    state.globalInclude.clear();
+    state.globalExclude.clear();
+    state.pos.forEach(p=>{p.include.clear();p.exclude.clear()});
+    refreshButtonStates();
+    apply();
+  }
+  function recomputeFromHistory() {
+    // Reset filters but keep search text as-is
+    clearFiltersOnly();
+    // Re-apply in order
+    for (const h of feedbackHistory) applyWordleFeedback(h.guess, h.pattern);
+    renderHistory();
+  }
+
+  const guessEl = byId('guessInput');
+  const patternEl = byId('patternInput');
+  const msgEl = byId('patternMsg');
+
+  byId('applyPattern').onclick = () => {
+    msgEl.textContent = '';
+    try {
+      if (feedbackHistory.length >= 6) {
+        throw new Error('You can apply at most 6 feedback lines.');
+      }
+      const g = normalizeGuess(guessEl.value);
+      const p = normalizePattern(patternEl.value);
+      if (!/^[a-z]{5}$/.test(g)) throw new Error('Guess must be 5 letters (a-z).');
+      if (p.length !== 5 || /[^GYB]/.test(p)) throw new Error('Result must be 5 chars of G/Y/B (or 🟩🟨⬛).');
+
+      feedbackHistory.push({ guess: g, pattern: p });
+      recomputeFromHistory();
+
+      msgEl.textContent = 'Applied ✓';
+      guessEl.value = '';
+      patternEl.value = '';
+    } catch (e) {
+      msgEl.textContent = e.message || 'Invalid input';
+    }
+  };
+  byId('undoLast').onclick = () => {
+    msgEl.textContent = '';
+    if (feedbackHistory.length === 0) {
+      msgEl.textContent = 'Nothing to undo.';
+      return;
+    }
+    feedbackHistory.pop();
+    recomputeFromHistory();
+    msgEl.textContent = 'Last feedback removed.';
+  };
+  byId('resetFeedback').onclick = () => {
+    msgEl.textContent = '';
+    feedbackHistory.length = 0;
+    recomputeFromHistory();
+    msgEl.textContent = 'Feedback cleared.';
+  };
+
+  // Enter key convenience
+  guessEl.addEventListener('keydown', e=>{ if(e.key==='Enter') byId('applyPattern').click(); });
+  patternEl.addEventListener('keydown', e=>{ if(e.key==='Enter') byId('applyPattern').click(); });
+
+  // Initialize history UI
+  renderHistory();
+  </script>
+</body>
+</html>
