@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wordle Helper — jaehongkim.com</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* --- Basic, clean UI --- */
+    :root{
+      --bg:#0f1115; --fg:#e6ebf2; --sub:#aab3c2; --muted:#667085;
+      --card:#161a22; --accent:#7aa2f7; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+      --btn:#222938; --btnHover:#2b3550; --border:#212836;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Inter,Roboto,Arial;}
+    .wrap{max-width:1000px;margin:0 auto;padding:20px;}
+    h1{font-size:20px;margin:0 0 12px 0;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;}
+    .btn{background:var(--btn);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .btn:hover{background:var(--btnHover)}
+    input[type="file"]{display:none}
+    .filelabel{display:inline-block}
+    .tag{color:var(--sub);font-size:12px}
+    .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .search{flex:1;min-width:220px}
+    .search input{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#0b0e14;color:var(--fg)}
+    .grid{display:grid;grid-template-columns:repeat(13,minmax(28px,1fr));gap:6px}
+    .k{display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid var(--border);background:#0b0e14;height:34px;cursor:pointer;user-select:none}
+    .k.on{outline:2px solid var(--accent)}
+    .k.inc{background:rgba(34,197,94,.18);border-color:#1f9b56}
+    .k.exc{background:rgba(239,68,68,.20);border-color:#a12828}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:#0b0e14;color:var(--fg);cursor:pointer}
+    .tab.active{outline:2px solid var(--accent)}
+    .pill{padding:3px 8px;border:1px solid var(--border);border-radius:999px;background:#0b0e14;color:var(--sub)}
+    .list{max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:12px}
+    .list ul{list-style:none;margin:0;padding:0}
+    .list li{padding:10px 12px;border-bottom:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .list li:last-child{border-bottom:none}
+    small{color:var(--muted)}
+    .hint{color:var(--sub)}
+    @media (max-width:720px){
+      .grid{grid-template-columns:repeat(9,minmax(28px,1fr))}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Wordle Helper <span class="tag">wordle.jaehongkim.com</span></h1>
+
+    <!-- Top controls -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="bar">
+        <label class="filelabel">
+          <input id="fileInput" type="file" accept=".csv,.txt" />
+          <button class="btn" id="chooseFileBtn" type="button">Upload custom list (CSV)</button>
+        </label>
+        <button class="btn" id="useDefaultCsv" type="button" title="Switch back to wordle_solutions_full.csv">Use default CSV</button>
+        <span class="pill"><strong id="count">0</strong> candidates</span>
+        <span class="hint">Source: <span id="src">–</span></span>
+      </div>
+      <div class="bar" style="margin-top:10px">
+        <div class="search"><input id="searchBox" type="text" placeholder="Search (substring, case-insensitive)..." /></div>
+        <button class="btn" id="clearAll" type="button">Clear filters</button>
+      </div>
+    </div>
+
+    <!-- Global include/exclude -->
+    <div class="row">
+      <div class="card" style="flex:1;min-width:320px">
+        <div style="margin-bottom:8px"><strong>Global include</strong> <small>(letters must appear anywhere)</small></div>
+        <div class="grid" id="gInc"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:320px">
+        <div style="margin-bottom:8px"><strong>Global exclude</strong> <small>(letters must not appear)</small></div>
+        <div class="grid" id="gExc"></div>
+      </div>
+    </div>
+
+    <!-- Position include/exclude -->
+    <div class="card" style="margin-top:12px">
+      <div class="tabs" id="tabs"></div>
+      <div class="row" style="margin-top:10px">
+        <div class="card" style="flex:1;min-width:280px">
+          <div style="margin-bottom:8px"><strong>Position include</strong> <small>(letter must be at the active position)</small></div>
+          <div class="grid" id="pInc"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <div style="margin-bottom:8px"><strong>Position exclude</strong> <small>(letter cannot be at the active position)</small></div>
+          <div class="grid" id="pExc"></div>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        Tips: Click letters to toggle. Use tabs to switch active position (1–5).
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="card list" style="margin-top:12px">
+      <ul id="words"></ul>
+    </div>
+
+    <div style="margin-top:10px"><small>Shortcut: type letters to toggle Global include; Shift+letter → Position include; Alt+letter → Position exclude; Keys 1–5 → switch position tab; / → focus search.</small></div>
+  </div>
+
+  <script>
+    // ===== Utilities =====
+    const byId = (id) => document.getElementById(id);
+    const ALPHA = Array.from({length:26},(_,i)=>String.fromCharCode(97+i)); // a-z
+
+    // ===== App State =====
+    const state = {
+      source: '–',
+      all: [],            // all words
+      filtered: [],       // filtered words
+      search: '',
+      globalInclude: new Set(),
+      globalExclude: new Set(),
+      pos: Array.from({length:5},()=>({include:new Set(), exclude:new Set()})),
+      activePos: 0
+    };
+
+    // ===== CSV parsing =====
+    function parseWordsFromCsvText(text){
+      // Accepts flexible CSV/plain list. Extract 5-letter [a-z] words.
+      const lines = text.split(/\r?\n/);
+      const words = [];
+      const seen = new Set();
+      for(const raw of lines){
+        const line = raw.trim();
+        if(!line) continue;
+
+        // Attempt CSV cell extraction
+        let cells = [];
+        if(line.includes(',')){
+          // naive split; supports quoted cells roughly
+          cells = line.match(/("([^"]*)"|[^,]+)/g) || [];
+          cells = cells.map(c=>c.replace(/^"(.*)"$/,'$1'));
+        }else{
+          cells = [line];
+        }
+
+        for(let c of cells){
+          c = (c||'').trim().toLowerCase();
+          const m = c.match(/^[a-z]{5}$/);
+          if(m && !seen.has(c)){ seen.add(c); words.push(c); }
+        }
+      }
+      return words;
+    }
+
+    // ===== Rendering =====
+    function buildKeyboard(container, kind){
+      // kind: 'gInc' | 'gExc' | 'pInc' | 'pExc'
+      container.innerHTML = '';
+      for(const ch of ALPHA){
+        const btn = document.createElement('div');
+        btn.className = 'k';
+        btn.textContent = ch;
+        btn.dataset.ch = ch;
+        btn.addEventListener('click', ()=>{
+          if(kind==='gInc'){
+            toggleSet(state.globalInclude, state.globalExclude, ch);
+          }else if(kind==='gExc'){
+            toggleSet(state.globalExclude, state.globalInclude, ch);
+          }else if(kind==='pInc'){
+            toggleSet(state.pos[state.activePos].include, state.pos[state.activePos].exclude, ch);
+          }else{
+            toggleSet(state.pos[state.activePos].exclude, state.pos[state.activePos].include, ch);
+          }
+          refreshButtonStates();
+          apply();
+        });
+        container.appendChild(btn);
+      }
+    }
+
+    function toggleSet(primary, secondary, ch){
+      if(primary.has(ch)) primary.delete(ch);
+      else { primary.add(ch); secondary.delete(ch); }
+    }
+
+    function refreshButtonStates(){
+      // Global grids
+      for(const el of byId('gInc').children){
+        const ch = el.dataset.ch;
+        el.classList.toggle('inc', state.globalInclude.has(ch));
+        el.classList.toggle('exc', false);
+      }
+      for(const el of byId('gExc').children){
+        const ch = el.dataset.ch;
+        el.classList.toggle('exc', state.globalExclude.has(ch));
+        el.classList.toggle('inc', false);
+      }
+      // Position grids depend on activePos
+      for(const el of byId('pInc').children){
+        const ch = el.dataset.ch;
+        el.classList.toggle('inc', state.pos[state.activePos].include.has(ch));
+        el.classList.toggle('exc', false);
+      }
+      for(const el of byId('pExc').children){
+        const ch = el.dataset.ch;
+        el.classList.toggle('exc', state.pos[state.activePos].exclude.has(ch));
+        el.classList.toggle('inc', false);
+      }
+      // Tabs
+      for(const el of byId('tabs').children){
+        el.classList.toggle('active', Number(el.dataset.idx)===state.activePos);
+      }
+    }
+
+    function renderTabs(){
+      const tabs = byId('tabs');
+      tabs.innerHTML = '';
+      for(let i=0;i<5;i++){
+        const t = document.createElement('button');
+        t.className = 'tab' + (i===state.activePos?' active':'');
+        t.textContent = 'Pos ' + (i+1);
+        t.dataset.idx = i;
+        t.onclick = ()=>{
+          state.activePos = i;
+          refreshButtonStates();
+        };
+        tabs.appendChild(t);
+      }
+    }
+
+    function renderList(){
+      const ul = byId('words');
+      ul.innerHTML = '';
+      for(const w of state.filtered){
+        const li = document.createElement('li');
+        li.textContent = w;
+        ul.appendChild(li);
+      }
+      byId('count').textContent = state.filtered.length;
+    }
+
+    // ===== Filtering =====
+    function apply(){
+      const gi = state.globalInclude;
+      const ge = state.globalExclude;
+      const search = (state.search||'').toLowerCase();
+
+      const out = [];
+      WORDS: for(const w of state.all){
+        // search substring
+        if(search && !w.includes(search)) continue;
+
+        // global exclude
+        for(const ch of ge){ if(w.includes(ch)) continue WORDS; }
+
+        // global include
+        for(const ch of gi){ if(!w.includes(ch)) continue WORDS; }
+
+        // per-position
+        for(let i=0;i<5;i++){
+          const need = state.pos[i].include;
+          const ban  = state.pos[i].exclude;
+          const c = w[i];
+          if(need.size>0 && !need.has(c)) continue WORDS;
+          if(ban.has(c)) continue WORDS;
+        }
+        out.push(w);
+      }
+      state.filtered = out;
+      renderList();
+    }
+
+    // ===== Word loading =====
+    function normalizeWords(arr){
+      const seen = new Set();
+      const words = [];
+      for(const x of arr){
+        const w = (x||'').toLowerCase();
+        if(/^[a-z]{5}$/.test(w) && !seen.has(w)){
+          seen.add(w);
+          words.push(w);
+        }
+      }
+      return words.sort();
+    }
+
+    function loadWordsFromArray(arr){
+      state.all = normalizeWords(arr);
+      state.source = currentSourceLabel;
+      byId('src').textContent = state.source;
+      apply();
+    }
+
+    // default sample (fallback)
+    const SAMPLE = [
+      'raise','orate','adieu','stare','arise','tears','rates','slate','crane','slant',
+      'spasm','relay','about','other','which','their','there','would','could','right'
+    ];
+
+    let currentSourceLabel = '–';
+
+    async function tryAutoload(){
+      // Load ./wordle_solutions_full.csv; fall back to SAMPLE
+      try{
+        const res = await fetch('./wordle_solutions_full.csv', { cache: 'no-store' });
+        if(!res.ok) throw new Error('fetch failed');
+        const text = await res.text();
+        const words = parseWordsFromCsvText(text);
+        if(!words.length) throw new Error('empty csv');
+        currentSourceLabel = 'wordle_solutions_full.csv';
+        loadWordsFromArray(words);
+      }catch(_){
+        currentSourceLabel = 'sample (fallback)';
+        loadWordsFromArray(SAMPLE);
+      }
+    }
+
+    async function loadDefaultCsv(){
+      try{
+        const btn = byId('useDefaultCsv');
+        btn.disabled = true; btn.textContent = 'Loading...';
+        const res = await fetch('./wordle_solutions_full.csv', { cache: 'no-store' });
+        if(!res.ok) throw new Error('Failed to fetch default CSV');
+        const text = await res.text();
+        const words = parseWordsFromCsvText(text);
+        if(!words.length) throw new Error('Default CSV is empty or invalid');
+        currentSourceLabel = 'wordle_solutions_full.csv';
+        loadWordsFromArray(words);
+      }catch(err){
+        alert('Could not load the default CSV.\n' + (err?.message||''));
+      }finally{
+        const btn = byId('useDefaultCsv');
+        btn.disabled = false; btn.textContent = 'Use default CSV';
+      }
+    }
+
+    // ===== Events =====
+    function wire(){
+      // keyboards
+      buildKeyboard(byId('gInc'),'gInc');
+      buildKeyboard(byId('gExc'),'gExc');
+      buildKeyboard(byId('pInc'),'pInc');
+      buildKeyboard(byId('pExc'),'pExc');
+      renderTabs();
+      refreshButtonStates();
+
+      // search
+      byId('searchBox').addEventListener('input', (e)=>{
+        state.search = e.target.value || '';
+        apply();
+      });
+
+      // clear
+      byId('clearAll').onclick = ()=>{
+        state.globalInclude.clear();
+        state.globalExclude.clear();
+        for(let i=0;i<5;i++){
+          state.pos[i].include.clear();
+          state.pos[i].exclude.clear();
+        }
+        byId('searchBox').value = '';
+        state.search = '';
+        refreshButtonStates();
+        apply();
+      };
+
+      // upload custom CSV
+      const fileInput = byId('fileInput');
+      byId('chooseFileBtn').onclick = ()=> fileInput.click();
+      fileInput.addEventListener('change', async ()=>{
+        const f = fileInput.files?.[0];
+        if(!f) return;
+        try{
+          const text = await f.text();
+          const words = parseWordsFromCsvText(text);
+          if(!words.length) throw new Error('No valid 5-letter words found');
+          currentSourceLabel = f.name || 'custom.csv';
+          loadWordsFromArray(words);
+        }catch(err){
+          alert('Failed to load file: ' + (err?.message||''));
+        }finally{
+          fileInput.value = '';
+        }
+      });
+
+      // default CSV button
+      byId('useDefaultCsv').onclick = ()=> loadDefaultCsv();
+
+      // keyboard shortcuts
+      window.addEventListener('keydown', (e)=>{
+        if(document.activeElement===byId('searchBox')) return;
+        const k = e.key.toLowerCase();
+
+        // position tabs 1-5
+        if(k>='1' && k<='5'){
+          state.activePos = Number(k)-1;
+          refreshButtonStates();
+          return;
+        }
+        // focus search
+        if(k==='/'){ e.preventDefault(); byId('searchBox').focus(); return; }
+        // letters
+        if(!/^[a-z]$/.test(k)) return;
+
+        if(e.altKey){
+          toggleSet(state.pos[state.activePos].exclude, state.pos[state.activePos].include, k);
+        }else if(e.shiftKey){
+          toggleSet(state.pos[state.activePos].include, state.pos[state.activePos].exclude, k);
+        }else{
+          toggleSet(state.globalInclude, state.globalExclude, k);
+        }
+        refreshButtonStates();
+        apply();
+      });
+    }
+
+    // ===== Boot =====
+    (async function(){
+      wire();
+      await tryAutoload(); // sets to default CSV or sample
+    })();
+  </script>
+</body>
+</html>
