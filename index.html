@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wordle Helper — jaehong.kim</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    :root{
+      --bg:#0f1115;--fg:#e6ebf2;--sub:#aab3c2;--muted:#667085;
+      --card:#161a22;--accent:#7aa2f7;--good:#22c55e;--bad:#ef4444;
+      --warn:#f59e0b;--btn:#222938;--btnHover:#2b3550;
+      --border:#212836;--input:#0b0e14;
+    }
+    body.light{
+      --bg:#f8fafc;--fg:#0f172a;--sub:#334155;--muted:#64748b;
+      --card:#ffffff;--accent:#3b82f6;--good:#16a34a;--bad:#dc2626;
+      --warn:#d97706;--btn:#e2e8f0;--btnHover:#cbd5e1;
+      --border:#dbe1ea;--input:#f1f5f9;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Inter,Roboto,Arial}
+    .wrap{max-width:1000px;margin:0 auto;padding:20px}
+    h1{font-size:20px;margin:0}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;min-width:0}
+    .btn{background:var(--btn);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .btn:hover{background:var(--btnHover)}
+    input[type="file"]{display:none}
+    .filelabel{display:inline-block}
+    .tag{color:var(--sub);font-size:12px;margin-left:6px}
+    .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .search{flex:1;min-width:220px;max-width:700px}
+    .search input{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--fg)}
+
+    /* Key grids */
+    .grid{display:grid;grid-template-columns:repeat(13,minmax(28px,1fr));gap:6px}
+    .k{display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid var(--border);background:var(--input);height:34px;cursor:pointer;user-select:none}
+    .k.inc{background:rgba(34,197,94,.18);border-color:#1f9b56}
+    .k.exc{background:rgba(239,68,68,.20);border-color:#a12828}
+
+    /* Tabs as a 5-segment control */
+    .tabs{display:grid;grid-template-columns:repeat(5, 1fr);gap:8px}
+    .tab{
+      padding:6px 10px;text-align:center;border-radius:10px;border:1px solid var(--border);
+      background:var(--input);color:var(--fg);cursor:pointer;white-space:nowrap;min-width:0;
+    }
+    .tab.active{outline:2px solid var(--accent)}
+
+    /* List */
+    .list{max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:12px}
+    .list ul{list-style:none;margin:0;padding:0}
+    .list li{padding:10px 12px;border-bottom:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .list li:last-child{border-bottom:none}
+    small{color:var(--muted)}
+    .hint{color:var(--sub)}
+
+    /* Big counter just above the list */
+    .counter{font-size:18px;font-weight:700;margin:14px 2px 6px 2px;color:var(--fg)}
+    .counter small{font-weight:500;color:var(--sub)}
+
+    /* Header row (title left, theme toggle right) */
+    .header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .header-row .btn{padding:6px 10px}
+
+    /* Help block */
+    .help{margin-top:18px;color:var(--sub);font-size:13px;line-height:1.45}
+    .help ul{margin:6px 0 0 18px;padding:0}
+    .help li{margin-bottom:4px}
+    .help code{background:var(--input);border-radius:5px;padding:1px 4px;font-family:ui-monospace,monospace}
+
+    /* Responsive grid steps to avoid overflow on narrower desktops */
+    @media(max-width:1024px){#gInc,#gExc,#pInc,#pExc{grid-template-columns:repeat(12,minmax(28px,1fr))}}
+    @media(max-width:960px){#gInc,#gExc,#pInc,#pExc{grid-template-columns:repeat(11,minmax(28px,1fr))}}
+    @media(max-width:900px){#gInc,#gExc,#pInc,#pExc{grid-template-columns:repeat(10,minmax(28px,1fr))}}
+    @media(max-width:840px){#gInc,#gExc,#pInc,#pExc{grid-template-columns:repeat(9,minmax(28px,1fr))}}
+    @media(max-width:720px){
+      .search{flex-basis:100%;max-width:100%}
+      #gInc,#gExc,#pInc,#pExc{grid-template-columns:repeat(9,minmax(26px,1fr));gap:5px}
+      #gInc .k,#gExc .k,#pInc .k,#pExc .k{height:32px}
+      .counter{font-size:16px;margin:12px 2px 6px}
+      .tabs{gap:6px}
+      .tab{padding:5px 8px;font-size:13px}
+    }
+    /* Extra small: hide 'Pos ' to keep one line */
+    @media(max-width:480px){
+      .tab .label{display:none}
+      .tab{padding:5px 6px;font-size:13px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header: title left, theme toggle right -->
+    <div class="header-row">
+      <h1>Wordle Helper <span class="tag">wordle.jaehong.kim</span></h1>
+      <button class="btn" id="modeToggle" title="Toggle Dark/Light">🌙 Dark</button>
+    </div>
+
+    <!-- Top controls -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="bar">
+        <label class="filelabel">
+          <input id="fileInput" type="file" accept=".csv,.txt" />
+          <button class="btn" id="chooseFileBtn">Upload Custom List (CSV)</button>
+        </label>
+        <button class="btn" id="use2315">Use 2315 Words (Default)</button>
+        <button class="btn" id="use3200">Use 3200 Words</button>
+        <button class="btn" id="use14855">Use 14855 Words</button>
+      </div>
+      <div class="bar" style="margin-top:10px">
+        <div class="search">
+          <input id="searchBox" placeholder="Search (use ?, *, [AEIOU], &, |, ( ) — see help below)" />
+        </div>
+        <button class="btn" id="clearAll">Clear Filters</button>
+      </div>
+    </div>
+
+    <!-- Global include/exclude -->
+    <div class="row">
+      <div class="card" style="flex:1;min-width:320px">
+        <div style="margin-bottom:8px"><strong>Global Include</strong></div>
+        <div class="grid" id="gInc"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:320px">
+        <div style="margin-bottom:8px"><strong>Global Exclude</strong></div>
+        <div class="grid" id="gExc"></div>
+      </div>
+    </div>
+
+    <!-- Position include/exclude -->
+    <div class="card" style="margin-top:12px">
+      <div class="tabs" id="tabs"></div>
+      <div class="row" style="margin-top:10px">
+        <div class="card" style="flex:1;min-width:280px">
+          <div style="margin-bottom:8px"><strong>Position Include</strong></div>
+          <div class="grid" id="pInc"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <div style="margin-bottom:8px"><strong>Position Exclude</strong></div>
+          <div class="grid" id="pExc"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Big counter above the list -->
+    <div class="counter"><span id="count">0</span> <small>candidates</small></div>
+
+    <!-- List -->
+    <div class="card list" style="margin-top:6px">
+      <ul id="words"></ul>
+    </div>
+
+    <!-- Keyboard hints -->
+    <div style="margin-top:10px">
+      <small>
+        Letter: Global Include · Alt+Letter: Global Exclude · Shift+Letter: Position Include · Ctrl+Letter: Position Exclude · 1–5: Switch Tab · /: Search · `: Theme
+      </small>
+    </div>
+
+    <!-- Search Help -->
+    <div class="help">
+      <strong>Search Help</strong>
+      <ul>
+        <li><b>?</b>: exactly one letter (e.g., <code>A?E</code> → <i>ACE, APE, ARE</i>)</li>
+        <li><b>*</b>: zero or more letters (e.g., <code>A*A</code> → <i>ARENA, ALPHA, AMAZE</i>)</li>
+        <li><b>[AEIOU]</b>: any one listed; <b>[^AEIOU]</b>: not these (e.g., <code>[^AEIOU]ATE</code> → <i>SLATE, CRATE</i>)</li>
+        <li><b>&</b>: AND; <b>|</b>: OR (AND has higher precedence)</li>
+        <li><b>( )</b>: group terms (e.g., <code>(ING & R) | (A?E & N)</code>)</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // ===== Utilities =====
+    const byId=id=>document.getElementById(id);
+    const ALPHA=Array.from({length:26},(_,i)=>String.fromCharCode(65+i)); // A–Z
+    const LETTER='[a-z]'; // single-letter class (lowercase)
+
+    // ===== State =====
+    const state={
+      all:[], filtered:[], search:'',
+      searchTester:null, // function(word)->bool built from parsed expression
+      globalInclude:new Set(), globalExclude:new Set(),
+      pos:Array.from({length:5},()=>({include:new Set(),exclude:new Set()})),
+      activePos:0
+    };
+
+    // ===== Theme =====
+    (function(){
+      const s=localStorage.getItem('wf-theme');
+      if(s==='light')document.body.classList.add('light');
+      updateThemeBtn();
+      byId('modeToggle').onclick=toggleTheme;
+    })();
+    function toggleTheme(){
+      document.body.classList.toggle('light');
+      localStorage.setItem('wf-theme',document.body.classList.contains('light')?'light':'dark');
+      updateThemeBtn();
+    }
+    function updateThemeBtn(){
+      const isLight=document.body.classList.contains('light');
+      byId('modeToggle').textContent=isLight?'☀️ Light':'🌙 Dark';
+    }
+
+    // ===== CSV helpers =====
+    function parseWordsFromCsvText(t){
+      const lines=t.split(/\r?\n/);const words=[];const seen=new Set();
+      for(const raw of lines){
+        const line=raw.trim(); if(!line) continue;
+        const cells=line.split(/,|\s+/);
+        for(let c of cells){
+          c=(c||'').trim().toLowerCase();
+          if(/^[a-z]{5}$/.test(c)&&!seen.has(c)){ seen.add(c); words.push(c); }
+        }
+      }
+      return words;
+    }
+    async function loadCsvFile(name){
+      try{
+        const btns=document.querySelectorAll('.btn'); btns.forEach(b=>b.disabled=true);
+        const res=await fetch(`./${name}`,{cache:'no-store'});
+        if(!res.ok) throw new Error('fetch failed');
+        const txt=await res.text();
+        const words=parseWordsFromCsvText(txt);
+        if(!words.length) throw new Error('empty');
+        loadWordsFromArray(words);
+      }catch(e){
+        alert('Error loading '+name+': '+e.message);
+      }finally{
+        document.querySelectorAll('.btn').forEach(b=>b.disabled=false);
+      }
+    }
+
+    // ===== Keyboards =====
+    function buildKeyboard(container,kind){
+      container.innerHTML='';
+      for(const ch of ALPHA){
+        const d=document.createElement('div');
+        d.className='k';
+        d.textContent=ch;              // display uppercase
+        d.dataset.ch=ch.toLowerCase(); // logic in lowercase
+        d.onclick=()=>{
+          if(kind==='gInc')toggle(state.globalInclude,state.globalExclude,ch.toLowerCase());
+          else if(kind==='gExc')toggle(state.globalExclude,state.globalInclude,ch.toLowerCase());
+          else if(kind==='pInc')toggle(state.pos[state.activePos].include,state.pos[state.activePos].exclude,ch.toLowerCase());
+          else toggle(state.pos[state.activePos].exclude,state.pos[state.activePos].include,ch.toLowerCase());
+          refresh(); apply();
+        };
+        container.appendChild(d);
+      }
+    }
+    function toggle(primary,secondary,ch){
+      if(primary.has(ch)) primary.delete(ch);
+      else { primary.add(ch); secondary.delete(ch); }
+    }
+    function refresh(){
+      const gI=byId('gInc').children, gE=byId('gExc').children,
+            pI=byId('pInc').children, pE=byId('pExc').children;
+      for(const e of gI) e.classList.toggle('inc',state.globalInclude.has(e.dataset.ch));
+      for(const e of gE) e.classList.toggle('exc',state.globalExclude.has(e.dataset.ch));
+      for(const e of pI) e.classList.toggle('inc',state.pos[state.activePos].include.has(e.dataset.ch));
+      for(const e of pE) e.classList.toggle('exc',state.pos[state.activePos].exclude.has(e.dataset.ch));
+      for(const t of byId('tabs').children) t.classList.toggle('active',Number(t.dataset.idx)===state.activePos);
+    }
+
+    // ===== Tabs (segment control) =====
+    function renderTabs(){
+      const tabs=byId('tabs'); tabs.innerHTML='';
+      for(let i=0;i<5;i++){
+        const b=document.createElement('button');
+        b.className='tab'+(i===state.activePos?' active':'');
+        b.innerHTML='<span class="label">Pos </span><span class="num">'+(i+1)+'</span>';
+        b.dataset.idx=i;
+        b.onclick=()=>{ state.activePos=i; refresh(); };
+        tabs.appendChild(b);
+      }
+    }
+
+    // ===== Mini-pattern compiler (for leaf tokens) =====
+    function escapeRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+    function sanitizeClassContent(s){
+      // Lowercase, remove spaces, and keep only a-z, '-', '^'
+      const lowered=s.toLowerCase().replace(/\s+/g,'');
+      if(!/^[a-z\-\^]*$/.test(lowered)) return null;
+      return lowered;
+    }
+    function buildRegexFromMiniPattern(q){
+      // q: already lowercased, contains no operators or parentheses, spaces ignored
+      let reStr='';
+      for(let i=0;i<q.length;i++){
+        const ch=q[i];
+        if(ch==='*'){
+          let j=i; while(j<q.length && q[j]==='*') j++;
+          reStr+=`${LETTER}*`; i=j-1;
+        }else if(ch==='?'){
+          reStr+=LETTER;
+        }else if(ch==='['){
+          let j=i+1; while(j<q.length && q[j]!==']') j++;
+          if(j<q.length && q[j]===']'){
+            const content=q.slice(i+1,j);
+            const sanitized=sanitizeClassContent(content);
+            if(sanitized!==null){ reStr+=`[${sanitized}]`; i=j; }
+            else{ reStr+=escapeRe('['); }
+          }else{
+            reStr+=escapeRe('[');
+          }
+        }else if(ch===' '){
+          // ignore spaces
+        }else if(/[a-z]/.test(ch)){
+          reStr+=ch;
+        }else{
+          reStr+=escapeRe(ch);
+        }
+      }
+      return new RegExp(reStr); // substring match
+    }
+
+    // ===== Tokens for expression: pat | '|' | '&' | '(' | ')' =====
+    function tokenize(expr){
+      const s=(expr||'').toLowerCase();
+      const tokens=[];
+      let i=0;
+      const isOp = c => c==='|' || c==='&';
+      while(i<s.length){
+        const c=s[i];
+        if(c===' '){ i++; continue; }           // ignore spaces
+        if(c==='(' || c===')' || isOp(c)){
+          tokens.push({type:c}); i++; continue;
+        }
+        // collect a mini-pattern (leaf). Honor [...] blocks.
+        let buf='';
+        while(i<s.length){
+          const ch=s[i];
+          if(ch==='(' || ch===')' || isOp(ch) || ch===' ') break;
+          if(ch==='['){
+            let j=i+1; while(j<s.length && s[j]!==']') j++;
+            if(j<s.length && s[j]===']'){
+              buf+=s.slice(i,j+1); i=j+1; continue;
+            }else{
+              buf+='['; i++; continue;
+            }
+          }
+          buf+=ch; i++;
+        }
+        tokens.push({type:'pat', value:buf});
+      }
+      return tokens;
+    }
+
+    // ===== Shunting-yard to RPN (AND '&' > OR '|') =====
+    function toRPN(tokens){
+      const out=[], stack=[];
+      const prec = t => t.type==='&' ? 2 : (t.type==='|' ? 1 : 0);
+      const isOp = t => t.type==='|' || t.type==='&';
+      for(const t of tokens){
+        if(t.type==='pat'){ out.push(t); }
+        else if(isOp(t)){
+          while(stack.length){
+            const top=stack[stack.length-1];
+            if(isOp(top) && prec(top)>=prec(t)) out.push(stack.pop()); else break;
+          }
+          stack.push(t);
+        }else if(t.type==='('){ stack.push(t); }
+        else if(t.type===')'){
+          while(stack.length && stack[stack.length-1].type!=='(') out.push(stack.pop());
+          if(stack.length && stack[stack.length-1].type==='(') stack.pop();
+        }
+      }
+      while(stack.length){
+        const x=stack.pop();
+        if(x.type!=='(' && x.type!==')') out.push(x);
+      }
+      return out;
+    }
+
+    // ===== Build tester from RPN =====
+    function buildTesterFromRPN(rpn){
+      const stack=[];
+      for(const t of rpn){
+        if(t.type==='pat'){
+          const re=buildRegexFromMiniPattern(t.value);
+          stack.push((w)=>re.test(w));
+        }else if(t.type==='&' || t.type==='|'){
+          const b=stack.pop(), a=stack.pop();
+          if(!a || !b) return null;
+          stack.push(t.type==='&' ? (w)=>a(w)&&b(w) : (w)=>a(w)||b(w));
+        }
+      }
+      return stack.length===1 ? stack[0] : null;
+    }
+
+    function buildSearchTester(expr){
+      const tokens = tokenize(expr);
+      if(!tokens.some(t=>t.type==='pat')) return null; // no filtering
+      const rpn = toRPN(tokens);
+      const tester = buildTesterFromRPN(rpn);
+      return tester || null;
+    }
+
+    // ===== Filtering & List =====
+    function apply(){
+      const out=[]; const gi=state.globalInclude, ge=state.globalExclude;
+      const tester=state.searchTester;
+      WORDS: for(const w of state.all){
+        if(tester && !tester(w)) continue;
+        for(const ch of ge) if(w.includes(ch)) continue WORDS;
+        for(const ch of gi) if(!w.includes(ch)) continue WORDS;
+        for(let i=0;i<5;i++){
+          const need=state.pos[i].include, ban=state.pos[i].exclude, c=w[i];
+          if(need.size>0 && !need.has(c)) continue WORDS;
+          if(ban.has(c)) continue WORDS;
+        }
+        out.push(w);
+      }
+      state.filtered=out; renderList();
+    }
+    function renderList(){
+      const ul=byId('words'); ul.innerHTML='';
+      for(const w of state.filtered){
+        const li=document.createElement('li');
+        li.textContent=w.toUpperCase();
+        ul.appendChild(li);
+      }
+      byId('count').textContent=state.filtered.length;
+    }
+    function loadWordsFromArray(a){
+      const seen=new Set();
+      state.all=a.filter(w=>/^[a-z]{5}$/.test(w)&&!seen.has(w)&&seen.add(w)).sort();
+      apply();
+    }
+
+    // ===== Events =====
+    function wire(){
+      buildKeyboard(byId('gInc'),'gInc');
+      buildKeyboard(byId('gExc'),'gExc');
+      buildKeyboard(byId('pInc'),'pInc');
+      buildKeyboard(byId('pExc'),'pExc');
+      renderTabs(); refresh();
+
+      byId('searchBox').oninput=e=>{
+        state.search=e.target.value;
+        state.searchTester=buildSearchTester(state.search);
+        apply();
+      };
+
+      byId('clearAll').onclick=()=>{
+        state.globalInclude.clear(); state.globalExclude.clear();
+        for(let i=0;i<5;i++){ state.pos[i].include.clear(); state.pos[i].exclude.clear(); }
+        state.search=''; state.searchTester=null; byId('searchBox').value='';
+        refresh(); apply();
+      };
+
+      const f=byId('fileInput');
+      byId('chooseFileBtn').onclick=()=>f.click();
+      f.onchange=async()=>{
+        const file=f.files?.[0]; if(!file) return;
+        try{
+          const t=await file.text();
+          const w=parseWordsFromCsvText(t);
+          if(!w.length) throw new Error('empty');
+          loadWordsFromArray(w);
+        }catch(e){ alert('Load failed: '+e.message); }
+        f.value='';
+      };
+
+      byId('use2315').onclick=()=>loadCsvFile('wordle_solutions_2315.csv');
+      byId('use3200').onclick=()=>loadCsvFile('wordle_solutions_3200.csv');
+      byId('use14855').onclick=()=>loadCsvFile('wordle_solutions_14855.csv');
+
+      window.onkeydown=e=>{
+        if(document.activeElement===byId('searchBox')) return;
+        const k=e.key, l=k.toLowerCase();
+        if(l>='1'&&l<='5'){ state.activePos=Number(l)-1; refresh(); return; }
+        if(k==='/'){ e.preventDefault(); byId('searchBox').focus(); return; }
+        if(k==='`'){ toggleTheme(); return; } // backtick for theme toggle
+        if(!/^[a-z]$/i.test(l)) return;
+        if(e.ctrlKey||e.metaKey) toggle(state.pos[state.activePos].exclude,state.pos[state.activePos].include,l);
+        else if(e.altKey)       toggle(state.globalExclude,state.globalInclude,l);
+        else if(e.shiftKey)     toggle(state.pos[state.activePos].include,state.pos[state.activePos].exclude,l);
+        else                    toggle(state.globalInclude,state.globalExclude,l);
+        refresh(); apply();
+      };
+    }
+
+    // ===== Boot =====
+    (async function(){
+      wire();
+      await loadCsvFile('wordle_solutions_2315.csv'); // default CSV
+    })();
+  </script>
+</body>
+</html>
